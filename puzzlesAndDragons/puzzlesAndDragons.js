@@ -15,7 +15,7 @@ Monster.prototype.getSecondaryElement = function() {
 		this.secondaryElement = 
 			this.monsterEntry.field("Secondary Element");
 	}
-	return this.primaryElement;
+	return this.secondaryElement;
 }
 
 function Drop(dropEntry) {
