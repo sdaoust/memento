@@ -1,3 +1,5 @@
+// MONSTER
+
 function Monster(monsterEntry) {
 	this.monsterEntry = monsterEntry;
 }
@@ -17,6 +19,8 @@ Monster.prototype.getSecondaryElement = function() {
 	}
 	return this.secondaryElement;
 }
+
+// DROP
 
 function Drop(dropEntry) {
 	this.dropEntry = dropEntry;
