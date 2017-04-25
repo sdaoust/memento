@@ -71,7 +71,7 @@ Library.prototype.getEntry = function() {
 Library.prototype.getName = function() {
 	return this._get("Name");
 }	
-Library.prototype.setName(name) {
+Library.prototype.setName = function(name) {
 	this._set("Name", name);
 }
 
@@ -222,7 +222,8 @@ Drop.prototype.setSecondaryElement = function(element) {
 }
 
 Drop.prototype.updateElements = function() {
-	var monster = this.getMonster();
-	this.setPrimaryElement(monster.getPrimaryElement());
-	this.setSecondaryElement(monster.getSecondaryElement());
+	this.setPrimaryElement(this._get("Primary Element Calculation"));
+	this.setSecondaryElement(
+		this._get("Secondary Element Calculation")
+	);
 }
