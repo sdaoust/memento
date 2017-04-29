@@ -2,7 +2,7 @@
 
 function Library() {}
 
-Library.prototype.init = function(entry) {    
+Library.prototype.init = function(entry) {
 	this._entry = entry;
 }
 
@@ -87,6 +87,36 @@ Library.prototype.setName = function(name) {
 	this._set("Name", name);
 }
 
+Library.prototype.toString = function() {
+	return this.getName();
+}
+
+Library.prototype.logParams = function(methodName, parameters) {
+	var logHeader = this._getLogHeader(methodName);
+
+	var parametersString = "{}";
+	if (parameters && Object.keys(parameters).length) {
+		var parametersList = [];
+		for (var key in parameters) {
+			var parameter = parameters[key];
+			parametersList.push(key + "=" + parameter);
+		}
+		parametersString = "{ " + parametersList.join(", ") + " }";
+	}
+
+	log(logHeader + ": " + parametersString);
+}
+
+Library.prototype.logReturn = function(methodName, returnValue) {
+	var logHeader = this._getLogHeader(methodName);
+	log(logHeader + ".return: " + returnValue);
+}
+
+Library.prototype._getLogHeader = function(methodName) {
+	var libraryName = this.constructor.name;
+	return libraryName + "." + this + "." + methodName;
+}
+
 // SKILL 
 
 function Skill(entry) {
@@ -94,12 +124,25 @@ function Skill(entry) {
 }
 
 Skill.prototype = new Library();
+Skill.prototype.constructor = Skill;
 
 Skill.prototype.isEqualTo = function(otherSkill) {
+	this.logParams("isEqualTo", { otherSkill : otherSkill });
+	this.logReturn(
+		"isEqualTo", 
+		otherSkill && this.getName() == otherSkill.getName()
+	);
 	return otherSkill && this.getName() == otherSkill.getName();
 }
 
 Skill.prototype.isEqualToOrBetterThan = function(otherSkill) {
+	this.logParams(
+		"isEqualToOrBetterThan", { otherSkill : otherSkill }
+	);
+	this.logReturn(
+		"isEqualToOrBetterThan", 
+		!otherSkill || this.isEqualTo(otherSkill)
+	);
 	return !otherSkill || this.isEqualTo(otherSkill);
 }
 
