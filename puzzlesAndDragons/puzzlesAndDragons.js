@@ -1,513 +1,1265 @@
-// LIBRARY
+// for some reason the below Object functions aren't defined in memento
 
-function Library() {}
+// mimic Object.assign
+function mergeMaps(map, newProperties) {
+	for (var key in newProperties) {
+		map[key] = newProperties[key];
+	}
+	return map;
+};
 
-Library.prototype.init = function(entry) {
-	this._entry = entry;
+// mimic Object.values
+function getMapValues(map) {
+	var values = [];
+	for (var key in map) {
+		values.push(map[key]);
+	}
+	return values;
 }
 
-Library.prototype._get = function(
-	fieldName, LibraryName, isManyToMany
-) {
-	var thisFieldName = 
-		this._convertToPrivateLowerCamelCase(fieldName);
-	if (!this[thisFieldName]) {
-		
-		// get the value of the field
-		var fieldValue = this._entry.field(fieldName);
+// helper memento functions
 
-		// but, if the value is a list of entries,
-		// recalculate the field value to return
-		if (LibraryName) {
-			var fieldEntries = fieldValue;
+var Logger = (function() {
+    
+    return {
+
+    	logParams : logParams,
+    	logReturn : logReturn
+
+    };
+
+    function logParams(logHeader, methodName, parameters) {
+
+		var parametersString = "{}";
+		if (parameters && Object.keys(parameters).length) {
+			var parametersList = [];
+			for (var key in parameters) {
+				var parameter = JSON.stringify(parameters[key]).replace(/\"/g, "");
+				parametersList.push(key + "=" + parameter);
+			}
+			parametersString = 
+				"{ " + parametersList.join(", ") + " }";
+		}
+
+		log(logHeader + ": " + parametersString);
+	}
+
+	function logReturn(logHeader, methodName, returnValue) {
+		log(logHeader + ".return: " + returnValue);
+	}
+
+})();
+
+// DATA - wrapper for entry
+
+var Data = function Data() {};
+Data.prototype = (function () {
+
+	return {
+		update            : update,
+		toString 		  : toString,
+		equals            : equals,
+		_init    		  : init,
+		_addProperties	  : addProperties,
+		_get	 		  : get,
+		_getCalculation   : getCalculation,
+		_set	 	 	  : set,
+		_toLowerCamelCase : toLowerCamelCase,
+		_toUpperCamelCase : toUpperCamelCase,
+		_logParams 		  : logParams,
+		_logReturn		  : logReturn,
+		_getLogHeader	  : getLogHeader
+	};
+
+	function init(entry) {
+		
+		Object.defineProperty(this, "_entry", { 
+			get : function() { return entry; },
+		});
+		
+	}
+
+	function update() {} // override in subclass
+	
+	/*
+	 * Parameter properties is a map
+	 * {
+	 * 	string field name as defined in the library. The lower camel 
+	 * 	case form of this name will become the property variable, eg
+	 * 	field name "Max Evo Monster" can be accessed by 
+	 * 	this.maxEvoMonster :
+	 * 		{
+	 * 			"variable" : optional, if a different property 
+	 * 						 variable name is desired, set this value
+	 * 			"type"     : optional, string can be either
+	 * 					     CALCULATION, CUSTOM, or DEFAULT. If no or
+	 * 					     unknown value is given, DEFAULT will be 
+	 * 					     used. CALCULATION is needed for library
+	 * 					     calculation fields. CUSTOM is needed for
+	 * 					     fields that are not defined in the
+	 * 					     library and only used by the code base.
+	 * 		}
+	 * }
+	 * Eac
+	 */
+	function addProperties(properties) {
+		
+		for (var propertyName in properties) {
+			var property = properties[propertyName];
 			
-			// if this is a many to many relationship,
-			// the field value will be a list
-			if (isManyToMany) {
+			// wrap in function so that property in the get/set 
+			// functions is always in scope
+			(function(dataObject, property, propertyName) {
+				
+				if (!property.variable) {
+					property.variable = 
+						dataObject._toLowerCamelCase(propertyName);
+				}
+				
+				if (!property.type || getMapValues(Data.PROPERTY_TYPES).indexOf(property.type) < 0) {
+					property.type = Data.PROPERTY_TYPES.DEFAULT;
+				}
+				
+				var getFunction = undefined;
+				var setFunction = undefined;
+
+				
+				switch(property.type) {
+
+					case Data.PROPERTY_TYPES.CALCULATION :
+						getFunction = function() {
+							return dataObject
+								._getCalculation(propertyName);
+						};
+						break;
+
+					case Data.PROPERTY_TYPES.CUSTOM :
+						var getFunctionName = 
+							"_get" + 
+							dataObject
+								._toUpperCamelCase(propertyName);
+						getFunction = dataObject[getFunctionName];
+						break;
+
+					case Data.PROPERTY_TYPES.DEFAULT :
+						getFunction = function() {
+							return dataObject._get({
+								name		 : propertyName,
+								DataType     : property.DataType,
+								isManyToMany : property.isManyToMany
+							});
+						}
+						setFunction = function(newValue) { 
+							return dataObject._set({
+								name		 : propertyName,
+								newValue	 : newValue,
+								DataType	 : property.DataType,
+								isManyToMany : property.isManyToMany
+							});
+						}
+						break;
+
+				}
+				
+				Object.defineProperty(
+					dataObject, 
+					property.variable, 
+					{ 
+						get : getFunction, 
+						set : setFunction 
+					}
+				);
+			})(this, property, propertyName);
+		}
+	}
+
+	/* 
+	 * Parameter field is a map
+	 * {
+	 * 	"name"     	   : string name of the field
+	 * 	"DataType"     : optional, method to instatiate a Data object
+	 * 				 	 if this field contains at least one entry
+	 * 	"isManyToMany" : optional, default false, boolean value 
+	 * 					 reflecting if this field represents a many to
+	 * 					 many relationship with another library
+	 * 	"ignoreCache"  : optional, default false. After a get call 
+	 * 					 this property will be defined as a private
+	 * 					 variable, eg property maxEvoMonster will be
+	 * 					 set to this._maxEvoMonster. This is to cache
+	 * 					 the property for quicker access. If
+	 * 					 ignoreCache is set to true, this cached value
+	 * 					 is not used and reset.
+	 * }
+	*/
+	function get(field) {
+		var thisFieldKey = "_" + this._toLowerCamelCase(field.name);
+		if (field.ignoreCache || !this[thisFieldKey]) {
+			
+			// get the value of the field
+			var fieldValue = this._entry.field(field.name);
+
+			// but, if the value is a list of entries,
+			// recalculate the field value
+			if (field.DataType) {
+				var entries = fieldValue;
+				
+				// if this is a many to many relationship,
+				// the field value will be a list
+				if (field.isManyToMany) {
+					fieldValue = [];
+					for (var i=0; i<entries.length; i++) {
+						fieldValue.push(new field.DataType(entries[i]));
+					}
+				} 
+				
+				// otherwise, if this is a one to many relationship,
+				// the field value will be a single object
+				else {
+					fieldValue = undefined;
+					if (entries.length == 1) {
+						fieldValue = new field.DataType(entries[0]);
+					}
+				}
+			}
+			
+			this[thisFieldKey] = fieldValue;
+		}
+		return this[thisFieldKey];
+	}
+
+	function getCalculation(fieldName) {
+		return this._entry.field(fieldName);
+	}
+
+	/* 
+	 * Parameter field is a map
+	 * {
+	 * 	"name"     	   : string name of the field
+	 * 	"newValue"     : is this field is not a relationship, then
+	 * 					 newValue is a primitive such as a string,
+	 * 					 number, or boolean; or newValue is a list of
+	 * 					 primitives. If this field has a one to many
+	 * 					 relationship, newValue must be a data object.
+	 * 					 If this field has a many to many
+	 * 					 relationship, newValue must be a list of data
+	 * 					 objects.
+	 * 	"DataType"     : optional, method to instatiate a Data object
+	 * 				 	 if this field contains at least one entry
+	 * 	"isManyToMany" : optional, default false, boolean value 
+	 * 					 reflecting if this field represents a many to
+	 * 					 many relationship with another library
+	 * }
+	*/
+	function set(field) {
+		var fieldValue = undefined;
+		if (field.DataType) {
+
+			// many to many relationship
+			if (field.isManyToMany) {
+				var dataCollection = field.newValue;
 				fieldValue = [];
-				for (var i=0; i<fieldEntries.length; i++) {
-					fieldValue.push(new LibraryName(fieldEntries[i]));
+				for (var i=0; i<dataCollection.length; i++) {
+					var dataObject = dataCollection[i];
+					fieldValue.push(dataObject._entry);
 				}
 			} 
-			
-			// otherwise, if this is a one to many relationship,
-			// the field value will be a single object
-			else {
-				fieldValue = undefined;
-				if (fieldEntries.length == 1) {
-					fieldValue = new LibraryName(fieldEntries[0]);
-				}
+
+			// one to many relationship
+			else if (field.newValue) {
+				fieldValue = field.newValue._entry;
 			}
+		} 
+
+		// no relationship
+		else {
+			fieldValue = field.newValue;
+		}
+
+		this._entry.set(field.name, fieldValue);
+		return this._get({
+			name		 : field.name,
+			DataType	 : field.DataType,
+			isManyToMany : field.isManyToMany,
+			ignoreCache  : true
+		});
+	}
+	
+	function toLowerCamelCase(string) {
+		var lowerCamelCaseString =
+			string[0].toLowerCase() + 
+			string.slice(1).replace(/ /g, "");
+		return lowerCamelCaseString;
+	}
+	
+	function toUpperCamelCase(string) {
+		var upperCamelCaseString =
+			string[0].toUpperCase() + 
+			string.slice(1).replace(/ /g, "");
+		return upperCamelCaseString;
+	}
+
+	function logParams(methodName, parameters) {
+		Logger.logParams(this._getLogHeader(methodName), methodName, parameters);
+	}
+
+	function logReturn(methodName, returnValue) {
+		var logHeader = this._getLogHeader(methodName);
+		Logger.logReturn(logHeader + ".return: " + returnValue);
+	}
+
+	function getLogHeader(methodName) {
+		var dataType = this.constructor.name;
+		return dataType + "." + this + "." + methodName;
+	}
+
+	function toString() {
+		return this.name;
+	}
+
+	function equals(other) {
+		return other && this.toString() == other.toString();
+	}
+
+})();
+Data.PROPERTY_TYPES = {
+	CALCULATION : "Calculation",
+	CUSTOM      : "Custom",
+	DEFAULT     : "Default"
+};
+
+// DATA COLLECTION - wrapper for library
+
+var DataCollection = function DataCollection(libraryName, DataType) {
+	this._init(libraryName, DataType);
+};
+DataCollection.prototype = (function () {
+
+	return {
+		_init 	   	  : init,
+		get   	   	  : get,
+		_add	   	  : add,
+		_logParams	  : logParams,
+		_logReturn 	  : logReturn,
+		_getLogHeader : getLogHeader,
+		toString	  : toString,
+	};
+
+	function init(libraryName, DataType) {
+		
+		// cache the library
+		Object.defineProperty(this, "_library", { 
+			get : function() { return libByName(libraryName); },
+		});
+
+		// cache the DataType
+		Object.defineProperty(this, "_DataType", {
+			get : function() { return DataType; }
+		});
+
+	}
+
+	function get() {
+
+		if (!this._collection) {
+			var entries = this._library.entries();
+			this._collection = [];
+			for (var i=0; i<entries.length; i++) {
+				var entry = entries[i];
+				this._collection.push(new this._DataType(entry));
+			}
+		}
+		return this._collection;
+
+	}
+
+	function add(entryData) {
+		
+		var entry = this._library.create({});
+		
+		for (var fieldName in entryData) {
+			
+			var field = entryData[fieldName];
+
+			// check if field is a primitive, data object, 
+			// or list of primtiives or data objects
+			var value = undefined;
+			
+			if (field instanceof Data) {
+				value = field._entry;
+			} 
+			else if (
+				Array.isArray(field) && 
+				field.length && 
+				field[0] instanceof Data
+			) {
+				value = [];
+				for (var i=0; i<field.length; i++) {
+					var dataObject = field[i];
+					value.push(dataObject._entry);
+				}
+			} 
+			else {
+				value = field;
+			}
+			
+			// set this field in the entry
+			entry.set(fieldName, value);
 		}
 		
-		this[thisFieldName] = fieldValue;
+		var dataObject = new this._DataType(entry);
+		dataObject.update();
+		return dataObject;
 	}
-	return this[thisFieldName];
-}
 
-Library.prototype._set = function(
-	fieldName, fieldValue, LibraryName, isManyToMany
-) {
-	// think of fieldValue as either
-	// 1) the string, number, boolean, or list of primitives
-	// 2) library object
-	// 3) list of library objects
-	if (LibraryName && fieldValue) {
-		if (isManyToMany) {
-			var libraryObjects = fieldValue;
-			fieldValue = [];
-			for (var i=0; i<libraryObjects.length; i++) {
-				var libraryObject = libraryObjects[i];
-				fieldValue.push(libraryObject.getEntry());
+	function logParams(methodName, parameters) {
+		var logHeader = this._getLogHeader(methodName);
+
+		var parametersString = "{}";
+		if (parameters && Object.keys(parameters).length) {
+			var parametersList = [];
+			for (var key in parameters) {
+				var parameter = parameters[key];
+				parametersList.push(key + "=" + parameter);
 			}
-		} else {
-			fieldValue = fieldValue.getEntry();
+			parametersString = 
+				"{ " + parametersList.join(", ") + " }";
 		}
-	}
-	this.getEntry().set(fieldName, fieldValue);
-	return this._get(fieldName, LibraryName, isManyToMany);
-}
-	
-	// convert string to its lower camel case private form
-	// example: "Field Name" -> "_fieldName"
-Library.prototype._convertToPrivateLowerCamelCase = function(name) {
-	return "_" + 
-	name[0].toLowerCase() + 
-	name.slice(1).replace(" ", "");
-}
-	
-Library.prototype.getEntry = function() {
-	return this._entry;
-}
-	
-Library.prototype.getName = function() {
-	return this._get("Name");
-}    
-Library.prototype.setName = function(name) {
-	this._set("Name", name);
-}
 
-Library.prototype.toString = function() {
-	return this.getName();
-}
-
-Library.prototype.logParams = function(methodName, parameters) {
-	var logHeader = this._getLogHeader(methodName);
-
-	var parametersString = "{}";
-	if (parameters && Object.keys(parameters).length) {
-		var parametersList = [];
-		for (var key in parameters) {
-			var parameter = parameters[key];
-			parametersList.push(key + "=" + parameter);
-		}
-		parametersString = "{ " + parametersList.join(", ") + " }";
+		log(logHeader + ": " + parametersString);
 	}
 
-	log(logHeader + ": " + parametersString);
-}
+	function logReturn(methodName, returnValue) {
+		var logHeader = this._getLogHeader(methodName);
+		log(logHeader + ".return: " + returnValue);
+	}
 
-Library.prototype.logReturn = function(methodName, returnValue) {
-	var logHeader = this._getLogHeader(methodName);
-	log(logHeader + ".return: " + returnValue);
-}
+	function getLogHeader(methodName) {
+		return this + "." + methodName;
+	}
 
-Library.prototype._getLogHeader = function(methodName) {
-	var libraryName = this.constructor.name;
-	return libraryName + "." + this + "." + methodName;
-}
+	function toString() {
+		return this.constructor.name;
+	}
+
+})();
 
 // SKILL 
 
-function Skill(entry) {
-	this.init(entry);
-}
-
-Skill.prototype = new Library();
-Skill.prototype.constructor = Skill;
-
-Skill.prototype.isEqualTo = function(otherSkill) {
-	this.logParams("isEqualTo", { otherSkill : otherSkill });
-	this.logReturn(
-		"isEqualTo", 
-		otherSkill && this.getName() == otherSkill.getName()
+var Skill = function Skill(entry) {
+	this._init(entry);
+	this._addProperties({
+		"Name" : {}
+	});
+};
+Skill.prototype = (function () {
+	
+	return mergeMaps(
+		new Data(),
+		{
+			constructor		   : Skill,
+			equalsOrBetterThan : equalsOrBetterThan
+		}
 	);
-	return otherSkill && this.getName() == otherSkill.getName();
-}
 
-Skill.prototype.isEqualToOrBetterThan = function(otherSkill) {
-	this.logParams(
-		"isEqualToOrBetterThan", { otherSkill : otherSkill }
+	function equalsOrBetterThan(otherSkill) {
+		this._logParams(
+			"equalsOrBetterThan", { otherSkill : otherSkill }
+		);
+		this._logReturn(
+			"equalsOrBetterThan", 
+			!otherSkill || this.equals(otherSkill)
+		);
+		return !otherSkill || this.equals(otherSkill);
+	}
+
+})();
+
+var SkillCollection = (function SkillCollection() {
+    
+    return mergeMaps(
+		new DataCollection("Skills", Skill),
+		{ 
+			constructor : SkillCollection,
+			add         : add 
+		}
 	);
-	this.logReturn(
-		"isEqualToOrBetterThan", 
-		!otherSkill || this.isEqualTo(otherSkill)
-	);
-	return !otherSkill || this.isEqualTo(otherSkill);
-}
+
+    /* 
+	 * Parameter values is a map
+	 * {
+	 * 	"Name" : string name of the skill
+	 * }
+	*/
+    function add(values) {
+    	this._logParams("add", values);
+    	var skill = this._add(values);
+    	this._logReturn("add", skill);
+    	return skill;
+    }
+
+})();
 
 // MONSTER
 
-function Monster(entry) {
-	this.init(entry);
-}
-
-Monster.prototype = new Library();
-
-Monster.prototype.getNumber = function() {
-	return this._get("Number");
-}
-Monster.prototype.setNumber = function(number) {
-	return this._set("Number", number);
-}
-	
-Monster.prototype.getPrimaryElement = function() {
-	return this._get("Primary Element");
-}
-Monster.prototype.setPrimaryElement = function(element) {
-	return this._set("Primary Element", element);
-}
-
-Monster.prototype.getSecondaryElement = function() {
-	return this._get("Secondary Element");
-}
-Monster.prototype.setSecondaryElement = function(element) {
-	return this._set("Secondary Element", element);
-}
-
-Monster.prototype.getSkill = function() {
-	return this._get("Skill", Skill);
-}
-Monster.prototype.setSkill = function(skill) {
-	return this._set("Skill", skill, Skill);
-}
-
-Monster.prototype.getNextEvoMonsters = function() {
-	return this._get("Next Evo Monsters", Monster, true);
-}
-Monster.prototype.setNextEvoMonsters = function(monsters) {
-	return this._set("Next Evo Monsters", monsters, Monster);
-}
-
-Monster.prototype.getMaxEvoMonsters = function() {
-	if (!this._maxEvoMonsters) {
-		this._maxEvoMonsters = [];
-		var nextEvoMonsters = this.getNextEvoMonsters();
-		switch (nextEvoMonsters.length) {
-			case 0:
-				this._maxEvoMonsters.push(this);
-				break;
-			default:
-				for (var i=0; i<nextEvoMonsters.length; i++) {
-					var nextEvoMonster = nextEvoMonsters[i];
-					this._maxEvoMonsters = this._maxEvoMonsters.concat(nextEvoMonster.getMaxEvoMonsters());
-				}
-				break;
+var Monster = function Monster(entry) {
+	this._init(entry);
+	this._addProperties({
+		"Name" 				: {},
+		"Number" 			: {},
+		"Primary Element"	: {},
+		"Secondary Element" : {},
+		"Skill" 		    : { 
+			DataType : Skill 
+		},
+		"Next Evo Monsters" : { 
+			DataType     : Monster, 
+			isManyToMany : true 
+		},
+		"Max Evo Monsters"  : {
+			type : Data.PROPERTY_TYPES.CUSTOM
 		}
-	}
-	return this._maxEvoMonsters;
-}
-
-Monster.prototype.hasSameSkillAs = function(otherMonster) {
-	var skill      = this.getSkill();
-	var otherSkill = otherMonster.getSkill();
-	return (!skill && !otherSkill) || (skill && skill.isEqualTo(otherSkill));
-}
-
-Monster.prototype.hasSameOrBetterSkillThan = function(otherMonster) {
-	var skill      = this.getSkill();
-	var otherSkill = otherMonster.getSkill();
-	return !otherSkill || (skill && skill.isEqualToOrBetterThan(otherSkill));
-}
-
-Monster.prototype.evolvesInto = function(evoMonster) {
-	if (this.getName() == evoMonster.getName()) {
-		return true;
-	}
-	var nextEvoMonsters      = this.getNextEvoMonsters();
-	var isEvolutionPathValid = false;
-	for (var i=0; i<nextEvoMonsters.length; i++) {
-		var nextEvoMonster   = nextEvoMonsters[i];
-		isEvolutionPathValid = nextEvoMonster.evolvesInto(evoMonster);
-		if (isEvolutionPathValid) {
-			break;
-		}
-	}
-	return isEvolutionPathValid;
-}
+	});
+};
+Monster.prototype = (function () {
 	
-// DUNGEON 
-
-function Dungeon(entry) {
-	this.init(entry);
-}
-
-Dungeon.prototype = new Library();
-
-Dungeon.prototype.getType = function() {
-	return this._get("Type");
-}
-Dungeon.prototype.setType = function(type) {
-	return this._set("Type", type);
-}
-
-Dungeon.prototype.isAvailable = function() {
-	return this._get("Available");
-}
-Dungeon.prototype.setAvailable = function(isAvailable) {
-	return this._set("Available", isAvailable);
-}
-
-// FLOOR
-
-function Floor(entry) {
-	this.init(entry);
-}
-
-Floor.prototype = new Library();
-
-Floor.prototype.getDungeon = function() {
-	return this._get("Dungeon", Dungeon);
-}
-Floor.prototype.setDungeon = function(dungeon) {
-	return this._set("Dungeon", dungeon, Dungeon);
-}
-
-Floor.prototype.isCleared = function() {
-	return this._get("Cleared");
-}
-Floor.prototype.setCleared = function(isCleared) {
-	return this._set("Cleared", isCleared);
-}
-
-
-// DROP
-
-function Drop(entry) {
-	this.init(entry);
-}
-
-Drop.prototype = new Library();
-	
-Drop.prototype.getFloor = function() {
-	return this._get("Floor", Floor);
-}
-Drop.prototype.setFloor = function(floor) {
-	return this._set("Floor", floor, Floor);
-}
-
-Drop.prototype.getMonster = function() {
-	return this._get("Monster", Monster);            
-}
-Drop.prototype.setMonster = function(monster) {
-	return this._set("Monster", monster, Monster);            
-}
-
-Drop.prototype.getTypes = function() {
-	return this._get("Type");
-}
-Drop.prototype.setTypes = function(types) {
-	return this._get("Type", types);
-}
-
-Drop.prototype.getRate = function() {
-	return this._get("Rate");
-}
-Drop.prototype.setRate = function(rate) {
-	return this._set("Rate", rate);
-}
-
-Drop.prototype.getPrimaryElement = function() {
-	return this._get("Primary Element");
-}
-Drop.prototype.setPrimaryElement = function(element) {
-	return this._set("Primary Element", element);
-}
-
-Drop.prototype.update = function() {
-
-	// update primary element
-	this.setPrimaryElement(this._get("Primary Element Calculation"));
-
-}
-
-// MONSTER BOX
-
-function BoxedMonster(entry) {
-	this.init(entry);
-}
-
-BoxedMonster.prototype = new Library();
-
-BoxedMonster.prototype.setName = undefined;
-
-BoxedMonster.prototype.getMonster = function() {
-	return this._get("Monster", Monster);            
-}
-BoxedMonster.prototype.setMonster = function(monster) {
-	return this._set("Monster", monster, Monster);            
-}
-
-BoxedMonster.prototype.getMaxEvoMonster = function() {
-	return this._get("Max Evo Monster", Monster);            
-}
-BoxedMonster.prototype.setMaxEvoMonster = function(monster) {
-	return this._set("Max Evo Monster", monster, Monster);            
-}
-BoxedMonster.prototype.updateMaxEvoMonster = function() {
-	// update max evolution if one is not set yet, 
-	// and if there's only one max evolution 
-	// and it has the same or better skill as this monster
-	var maxEvoMonster = this.getMaxEvoMonster();
-	var monster       = this.getMonster();
-	if (!maxEvoMonster) {
-		var maxEvoMonsters = monster.getMaxEvoMonsters();
-		if (maxEvoMonsters.length == 1) {
-			var possibleMaxEvoMonster = maxEvoMonsters[0];
-			if (possibleMaxEvoMonster.hasSameSkillAs(monster)) {
-				maxEvoMonster = possibleMaxEvoMonster;
-			} else if (possibleMaxEvoMonster.hasSameOrBetterSkillThan(monster)) {
-				// do any monsters in between this boxed monster and its max evo have a different skill?
-				// if so, then this max evo monster doesn't count
-				var pathToMaxEvoMonsterYieldsManySkills = false;
-				var nextEvoMonsters = monster.getNextEvoMonsters();
-				while (nextEvoMonsters.length == 1) {
-					var nextEvoMonster = nextEvoMonsters[0];
-					if (!possibleMaxEvoMonster.hasSameOrBetterSkillThan(nextEvoMonster)) {
-						pathToMaxEvoMonsterYieldsManySkills = true;
-						break;
-					}
-					nextEvoMonsters = nextEvoMonster.getNextEvoMonsters();
-				}
-				if (!pathToMaxEvoMonsterYieldsManySkills) {
-					maxEvoMonster = possibleMaxEvoMonster;
-				}
-			}
-			if (maxEvoMonster) {
-				this.setMaxEvoMonster(maxEvoMonster);
-			}
+	return mergeMaps(
+		new Data(),
+		{
+			constructor 	   	   : Monster,
+			hasSameSkillAs    	   : hasSameSkillAs,
+			hasSameOrBetterSkillAs : hasSameOrBetterSkillAs,
+			evolvesInto			   : evolvesInto,
+			_getMaxEvoMonsters 	   : getMaxEvoMonsters,
 		}
-	}
-}
+	);
 
-BoxedMonster.prototype.getNextEvoMonster = function() {
-	return this._get("Next Evo Monster", Monster);            
-}
-BoxedMonster.prototype.setNextEvoMonster = function(monster) {
-	return this._set("Next Evo Monster", monster, Monster);            
-}
-BoxedMonster.prototype.updateNextEvoMonster = function() {
-	var monster        = this.getMonster();
-	var nextEvoMonster = undefined;
-	if(!this.isMaxEvolved()) {
-		var nextEvoMonsters = monster.getNextEvoMonsters();
-		var maxEvoMonster = this.getMaxEvoMonster();
-		if (nextEvoMonsters.length == 1) {
-			var possibleNextEvoMonster = nextEvoMonsters[0];
-			if (maxEvoMonster) {
-				nextEvoMonster = possibleNextEvoMonster;
-			}
-			else if (possibleNextEvoMonster.hasSameOrBetterSkillThan(monster)) {
-				nextEvoMonster = possibleNextEvoMonster;
-			}
-		} else if (nextEvoMonsters.length > 1 && maxEvoMonster) {
-			// find the next evo that leads to max evo
-			for (var i=0; i<nextEvoMonsters.length; i++) {
-				var possibleNextEvoMonster = nextEvoMonsters[i];
-				if (possibleNextEvoMonster.evolvesInto(maxEvoMonster)) {
-					nextEvoMonster = possibleNextEvoMonster;
+	function hasSameSkillAs(otherMonster) {
+		this._logParams(
+			"hasSameSkillAs", { otherMonster : otherMonster }
+		);
+		var hasSameSkill =
+			( !this.skill && !otherMonster.skill ) || 
+			( this.skill && this.skill.equals(otherMonster.skill) );
+		this._logReturn("hasSameSkillAs", hasSameSkill);
+		return hasSameSkill;
+	}
+
+	function hasSameOrBetterSkillAs(otherMonster) {
+		this._logParams(
+			"hasSameOrBetterSkillAs", { otherMonster : otherMonster }
+		);
+		var hasSameOrBetterSkill =
+			( !otherMonster.skill ) || 
+			( this.skill && 
+			  this.skill.equalsOrBetterThan(otherMonster.skill) );
+		this._logReturn(
+			"hasSameOrBetterSkillAs", hasSameOrBetterSkill
+		);
+		return hasSameOrBetterSkill;
+	}
+
+	function evolvesInto(monster) {
+		this._logParams("evolvesInto", { monster : monster });
+
+		var isEvolutionPathValid = false;
+
+		if (this.equals(monster)) {
+			isEvolutionPathValid = true;
+		} else {
+			for (var i=0; i<this.nextEvoMonsters.length; i++) {
+				var nextEvoMonster   = this.nextEvoMonsters[i];
+				if (nextEvoMonster.evolvesInto(monster)) {
+					isEvolutionPathValid = true;
 					break;
 				}
 			}
 		}
+
+		this._logReturn("evolvesInto", isEvolutionPathValid);
+		return isEvolutionPathValid;
 	}
-	this.setNextEvoMonster(nextEvoMonster);
-}
 
-BoxedMonster.prototype.isMaxEvolved = function() {
-	return this._get("Max Evolved");            
-}
-BoxedMonster.prototype.setMaxEvolved = function(isMaxEvolved) {
-	return this._set("Max Evolved", isMaxEvolved);            
-}
-BoxedMonster.prototype.updateMaxEvolved = function() {
-	var maxEvoMonster = this.getMaxEvoMonster();
-	this.setMaxEvolved(maxEvoMonster && this.getMonster().getName() == maxEvoMonster.getName());
-}
-
-BoxedMonster.prototype.isSkillFinal = function() {
-	return this._get("Has Final Skill");            
-}
-BoxedMonster.prototype.setSkillFinal = function(isSkillFinal) {
-	return this._set("Has Final Skill", isSkillFinal);            
-}
-BoxedMonster.prototype.updateSkillFinal = function() {
-	var isSkillFinal  = false;
-	var maxEvoMonster = this.getMaxEvoMonster();
-	if (this.isMaxEvolved()) {
-		isSkillFinal = true;
-	} else if (maxEvoMonster) {
-		isSkillFinal = this.getMonster().hasSameSkillAs(maxEvoMonster);
+	function getMaxEvoMonsters() {
+		this._logParams("getMaxEvoMonsters");
+		if (!this._maxEvoMonsters) {
+			this._maxEvoMonsters = [];
+			switch (this.nextEvoMonsters.length) {
+				case 0:
+					this._maxEvoMonsters.push(this);
+					break;
+				default:
+					for (var i=0; i<this.nextEvoMonsters.length; i++)
+					{
+						var nextEvoMonster = this.nextEvoMonsters[i];
+						this._maxEvoMonsters = 
+							this._maxEvoMonsters.concat(
+								nextEvoMonster.maxEvoMonsters
+							);
+					}
+					break;
+			}
+		}
+		this._logReturn("getMaxEvoMonsters", this._maxEvoMonsters);
+		return this._maxEvoMonsters;
 	}
-	this.setSkillFinal(isSkillFinal);
-}
 
-BoxedMonster.prototype.isSkillMaxed = function() {
-	return this._get("Maxed Skill");            
+})();
+
+var MonsterCollection = (function MonsterCollection() {
+    
+    return mergeMaps(
+		new DataCollection("Monsters", Monster),
+		{ 
+			constructor : MonsterCollection,
+			add         : add 
+		}
+	);
+
+    /* 
+	 * Parameter values is a map
+	 * {
+	 * 	"Name" 				: string name of the monster
+	 * 	"Number"			: integer number of the monster
+	 * 	"Primary Element"   : string element of the monster, must be
+	 * 						  one of "Fire", "Water", "Wood", "Light",
+	 * 						  or "Dark"
+	 * 	"Secondary Element" : optional, string element of the monster, 
+	 * 						  must be one of "Fire", "Water", "Wood", 
+	 * 						  "Light", or "Dark"
+	 * 	"Skill"				: optional, Skill object of this monster
+	 * 	"Next Evo Monsters" : optional, list of Monster objects that
+	 * 						  this monster can evolve directly into
+	 * }
+	*/
+    function add(values) {
+    	this._logParams("add", { values : values });
+
+    	// set defaults
+    	if (!values["Next Evo Monsters"]) {
+    		values["Next Evo Monsters"] = [];
+    	}
+
+    	var monster = this._add(values);
+    	this._logReturn("add", monster);
+    	return monster;
+    }
+
+})();
+	
+// DUNGEON 
+
+var Dungeon = function Dungeon(entry) {
+	this._init(entry);
+	this._addProperties({
+		"Name"      : {},
+		"Type" 		: {},
+		"Available" : { variable : "isAvailable"},
+	});
+};
+Dungeon.TYPES = {
+	NORMAL    : "Normal",
+	TECHNICAL : "Technical",
+	SPECIAL   : "Special"
 }
-BoxedMonster.prototype.setSkillMaxed = function(isSkillMaxed) {
-	return this._set("Maxed Skill", isSkillMaxed);            
+Dungeon.prototype = (function () {
+	
+	return mergeMaps(
+		new Data(),
+		{ constructor : Dungeon }
+	);
+
+})();
+
+var DungeonCollection = (function DungeonCollection() {
+    
+    return mergeMaps(
+		new DataCollection("Dungeons", Dungeon),
+		{ 
+			constructor : DungeonCollection,
+			add         : add 
+		}
+	);
+
+    /* 
+	 * Parameter values is a map
+	 * {
+	 * 	"Name" 		   : string name of the dungeon
+	 * 	"Type"		   : string type of the dungeon, must be one of
+	 * 					 Dungeon.TYPES
+	 * 	"Is Available" : optional, default false, boolean value of 
+	 * 					 whether this dungeon is available
+	 * }
+	*/
+    function add(values) {
+    	this._logParams("add", { values : values });
+
+    	// set defaults
+    	if (!values["Is Available"]) {
+    		values["Is Available"] = false;
+    	}
+
+    	var dungeon = this._add(values);
+    	this._logReturn("add", dungeon);
+    	return dungeon;
+    }
+
+})();
+
+
+// FLOOR
+
+var Floor = function Floor(entry) {
+	this._init(entry);
+	this._addProperties({
+		"Name" 		 : {},
+		"Dungeon"    : { DataType : Dungeon },
+		"Is Cleared" : {},
+	});
+};
+Floor.prototype = (function () {
+	
+	return mergeMaps(
+		new Data(),
+		{ constructor : Floor }
+	);
+})();
+
+var FloorCollection = (function FloorCollection() {
+    
+    return mergeMaps(
+		new DataCollection("Floors", Floor),
+		{ 
+			constructor : FloorCollection,
+			add         : add 
+		}
+	);
+
+    /* 
+	 * Parameter values is a map
+	 * {
+	 * 	"Name" 		 : string name of the floor
+	 * 	"Dungeon"	 : Dungeon object that this floor is on
+	 * 	"Is Cleared" : optional, default false, boolean value of 
+	 * 				   whether this dungeon has been cleared
+	 * }
+	*/
+    function add(values) {
+    	this._logParams("add", { values : values });
+
+    	// set defaults
+    	if (!values["Is Cleared"]) {
+    		values["Is Cleared"] = false;
+    	}
+
+    	var floor = this._add(values);
+    	this._logReturn("add", floor);
+    	return floor;
+    }
+
+})();
+
+
+// DROP
+
+var Drop = function Drop(entry) {
+	this._init(entry);
+	this._addProperties({
+		"Location"		   			  : { 
+			type : Data.PROPERTY_TYPES.CALCULATION 
+		},
+		"Floor" 		  			  : { DataType : Floor },
+		"Monster"					  : { DataType : Monster },
+		"Type"						  : { variable : "types" },
+		"Rate"					      : {},
+		"Primary Element"			  : {},
+		"Primary Element Calculation" : { 
+			type : Data.PROPERTY_TYPES.CALCULATION
+		}
+	});
+	
+};
+Drop.TYPES = {
+	RANDOM : "Random",
+	MAJOR  : "Major",
+	RARE   : "Rare",
+	INVADE : "Invade"
 }
-BoxedMonster.prototype.updateSkillMaxed = function() {
-	var isSkillMaxed = this.isSkillMaxed();
-	if (!isSkillMaxed && this.isSkillFinal() && !this.getMonster().getSkill()) {
-		isSkillMaxed = true;
-		this.setSkillMaxed(isSkillMaxed);
+Drop.prototype = (function () {
+	
+	return mergeMaps(
+		new Data(),
+		{ 
+			constructor 		  : Drop,
+			update                : update,
+			_updatePrimaryElement : updatePrimaryElement,
+			toString              : toString,
+		}
+	);
+	
+	function update() {
+		this._logParams("update");
+		this._updatePrimaryElement();
+		this._logReturn("update");
 	}
-}
 
-BoxedMonster.prototype.getPrimaryElement = function() {
-	return this._get("Primary Element");
-}
-BoxedMonster.prototype.setPrimaryElement = function(element) {
-	return this._set("Primary Element", element);
-}
-BoxedMonster.prototype.updatePrimaryElement = function() {
-	this.setPrimaryElement(this._get("Primary Element Calculation"));
-}
+	function updatePrimaryElement() {
+		this._logParams("updatePrimaryElement");
+		this.primaryElement = this.primaryElementCalculation;
+		this._logReturn("updatePrimaryElement", this.primaryElement);
+		return this.primaryElement;
+	}
+	
+	function toString() {
+		return this.location + ": " + this.monster + ": " + this.types.join(", ");
+	}
 
-BoxedMonster.prototype.update = function() {
-	this.updatePrimaryElement();
-	this.updateMaxEvoMonster();
-	this.updateMaxEvolved();
-	this.updateNextEvoMonster();
-	this.updateSkillFinal();
-	this.updateSkillMaxed();
-}
+})();
 
-BoxedMonster.prototype.evolve = function() {
-	if (this.isMaxEvolved()) {
-		message("This monster is already max evolved");
-	} else {
-		var nextEvoMonster = this.getNextEvoMonster();
-		if (!nextEvoMonster) {
+var DropCollection = (function DropCollection() {
+    
+    return mergeMaps(
+		new DataCollection("Drops", Drop),
+		{ 
+			constructor : DropCollection,
+			add         : add 
+		}
+	);
+
+    /* 
+	 * Parameter values is a map
+	 * {
+	 * 	"Floor"   : Floor object of this drop
+	 * 	"Monster" : Monster object of this drop
+	 * 	"Type"    : optional, default "Random", string value of the
+	 * 				type of drop, must be one of Drop.TYPES
+	 * 	"Rate"	  : optional, integer rate percentage of this drop
+	 * }
+	*/
+    function add(values) {
+    	this._logParams("add", { values : values });
+
+    	// set defaults
+    	if (!values["Type"]) {
+    		values["Type"] = Drop.TYPES.RANDOM;
+    	}
+
+    	var drop = this._add(values);
+    	this._logReturn("add", drop);
+    	return drop;
+    }
+
+})();
+
+// MONSTER BOX
+
+var BoxedMonster = function BoxedMonster(entry) {
+	this._init(entry);
+	this._addProperties({
+		"Name"			   			  : { 
+			type : Data.PROPERTY_TYPES.CALCULATION
+		},
+		"Monster"		 			  : { DataType : Monster },
+		"Max Evo Monster"			  : { DataType : Monster },
+		"Next Evo Monster"			  : { DataType : Monster },
+		"Max Evolved"  			  	  : { variable : "isMaxEvolved" },
+		"Has Final Skill"			  : { variable : "isSkillFinal" },
+		"Maxed Skill" 			  	  : { variable : "isSkillMaxed" },
+		"Primary Element"			  : {},
+		"Primary Element Calculation" : { 
+			type : Data.PROPERTY_TYPES.CALCULATION
+		}
+	});
+};
+BoxedMonster.prototype = (function () {
+	
+	return mergeMaps(
+		new Data(),
+		{ 
+			constructor		      : BoxedMonster,
+			evolve				  : evolve,
+			update                : update,
+			_updateMaxEvoMonster  : updateMaxEvoMonster,
+			_updateNextEvoMonster : updateNextEvoMonster,
+			_updateMaxEvolved     : updateMaxEvolved,
+			_updateSkillFinal     : updateSkillFinal,
+			_updateSkillMaxed     : updateSkillMaxed,
+			_updatePrimaryElement : updatePrimaryElement,
+			equals                : undefined,
+		}
+	);
+
+	function evolve() {
+		this._logParams("evolve");
+
+		if (this.isMaxEvolved) {
+			message("This monster is already max evolved");
+		}
+		
+		else if (this.nextEvoMonster) {
+			this.monster = this.nextEvoMonster;
+			this.update();
+		}
+		
+		else {
 			// there is no set next evo,
 			// but it is possible this monster has only one next evo
 			// if that next evo as a different skill
 			// let's check
-			var nextEvoMonsters = this.getMonster().getNextEvoMonsters();
-			if (nextEvoMonsters.length == 1) {
-				nextEvoMonster = nextEvoMonsters[0];
+			if (this.monster.nextEvoMonsters.length == 1) {
+				var nextEvoMonster = this.monster.nextEvoMonsters[0];
+				this.monster = nextEvoMonster;
+				this.update();
+			} else {
+				message(
+					"This monster does not have a known next " +
+					"evolution"
+				);
 			}
 		}
-		if (nextEvoMonster) {
-			this.setMonster(nextEvoMonster);
-			this.updatePrimaryElement();
-			this.updateMaxEvolved();
-			this.updateNextEvoMonster();
-			this.updateSkillFinal();
-		} else {
-			message("This monster does not have a known next evolution");
-		}
+
+		this._logReturn("evolve", this.monster);
+		return this.monster;
 	}
-}
+
+	// overwrite Data.update() so that the update functions are 
+	// called in order
+	function update() {
+		this._logParams("update");
+		this._updatePrimaryElement();
+		this._updateMaxEvoMonster();
+		this._updateMaxEvolved();
+		this._updateNextEvoMonster();
+		this._updateSkillFinal();
+		this._updateSkillMaxed();
+		this._entry.recalc();
+		this._logReturn("update");
+	}
+
+	function updateMaxEvoMonster() {
+		// update max evolution if one is not set yet, 
+		// if there's only one max evolution ,
+		// and the max evolution has the same or better skill
+		
+		this._logParams("updateMaxEvoMonster");
+
+		if ( !this.maxEvoMonster &&
+			 this.monster.maxEvoMonsters.length == 1 ) 
+		{
+			var possibleMaxEvoMonster = 
+				this.monster.maxEvoMonsters[0];
+
+			if (possibleMaxEvoMonster.hasSameSkillAs(this.monster)) {
+				this.maxEvoMonster = possibleMaxEvoMonster;
+			} 
+
+			else if (
+				possibleMaxEvoMonster
+					.hasSameOrBetterSkillAs(this.monster)) 
+			{
+				// possible max evo monster has better skill
+
+				// do any monsters in between this boxed monster and 
+				// its max evo have a different skill?
+				// if so, then this max evo monster doesn't count
+				var evolutionPathHasOtherSkills = false;
+				var nextEvoMonsters = this.monster.nextEvoMonsters;
+				while (nextEvoMonsters.length == 1) {
+					var nextEvoMonster = nextEvoMonsters[0];
+					if (!possibleMaxEvoMonster
+							.hasSameOrBetterSkillAs(nextEvoMonster)
+					) {
+						evolutionPathHasOtherSkills = true;
+						break;
+					}
+					nextEvoMonsters = nextEvoMonster.nextEvoMonsters;
+				}
+				if (!evolutionPathHasOtherSkills) {
+					this.maxEvoMonster = possibleMaxEvoMonster;
+				}
+			}
+		}
+
+		this._logReturn("updateMaxEvoMonster", this.maxEvoMonster);
+		return this.maxEvoMonster;
+	}
+
+	function updateNextEvoMonster() {
+
+		this._logParams("updateNextEvoMonster");
+
+		if (!this.isMaxEvolved && 
+			 this.monster.nextEvoMonsters.length == 1 ) 
+		{
+			var possibleNextEvoMonster = 
+				this.monster.nextEvoMonsters[0];
+			if (this.maxEvoMonster) {
+				this.nextEvoMonster = possibleNextEvoMonster;
+			}
+			else if (possibleNextEvoMonster
+					.hasSameOrBetterSkillAs(this.monster)) 
+			{
+				this.nextEvoMonster = possibleNextEvoMonster;
+			}
+		} 
+
+		else if ( this.monster.nextEvoMonsters.length > 1 && 
+				  this.maxEvoMonster ) 
+		{
+			// find the next evo that leads to max evo
+			for (var i=0; i<this.monster.nextEvoMonsters.length; i++)
+			{
+				var possibleNextEvoMonster = 
+					this.monster.nextEvoMonsters[i];
+				if (possibleNextEvoMonster.evolvesInto(this.maxEvoMonster))
+				{
+					this.nextEvoMonster = possibleNextEvoMonster;
+					break;
+				}
+			}
+		}
+
+		if (this.monster.equals(this.nextEvoMonster)) {
+			this.nextEvoMonster = undefined;
+		}
+
+		this._logReturn("updateNextEvoMonster", this.nextEvoMonster);
+		return this.nextEvoMonster;
+	}
+
+	function updateMaxEvolved() {
+		this._logParams("updateMaxEvolved");
+		this.isMaxEvolved = 
+			this.maxEvoMonster && this.monster.equals(this.maxEvoMonster);
+		this._logReturn("updateMaxEvolved", this.isMaxEvolved);
+		return this.isMaxEvolved;
+	}
+
+	function updateSkillFinal() {
+		this._logParams("updateSkillFinal");
+
+		if (this.isMaxEvolved) {
+			this.isSkillFinal = true;
+		} else if (this.maxEvoMonster) {
+			this.isSkillFinal = 
+				this.monster.hasSameSkillAs(this.maxEvoMonster);
+		}
+
+		this._logReturn("updateSkillFinal", this.isSkillFinal);
+		return this.isSkillFinal;
+	}
+
+	function updateSkillMaxed() {
+		this._logParams("updateSkillMaxed");
+		if (!this.isSkillFinal) {
+			this.isSkillMaxed = false;
+		} else if (!this.monster.skill) {
+			this.isSkillMaxed = true;
+		}
+		this._logReturn("updateSkillMaxed", this.isSkillMaxed);
+		return this.isSkillMaxed;
+	}
+
+	function updatePrimaryElement() {
+		this._logParams("updatePrimaryElement");
+		this.primaryElement = this.primaryElementCalculation;
+		this._logReturn("updatePrimaryElement", this.primaryElement);
+		return this.primaryElement;
+	}
+
+})();
+
+var BoxedMonsterCollection = (function BoxedMonsterCollection() {
+    
+    return mergeMaps(
+		new DataCollection("Monster Box", BoxedMonster),
+		{ 
+			constructor : BoxedMonsterCollection,
+			add         : add 
+		}
+	);
+
+    /* 
+	 * Parameter values is a map
+	 * {
+	 * 	"Monster" 		   : Monster object of this boxed monster
+	 * 	"Max Evo Monster"  : optional, Monster object that is the max
+	 * 					     evolution this boxed monster should 
+	 * 					     become
+	 * 	"Next Evo Monster" : optional, Monster object that this boxed
+	 * 						 monster should evolve directly into next
+	 * 	"Max Evolved"	   : optional, default false, boolean value of
+	 * 						 whether this boxed monster is finished
+	 * 						 evolving
+	 * 	"Has Final Skill"  : optional, default false, boolean value of
+	 * 						 whether this boxed monster has the same
+	 * 						 skill as its set max evolution
+	 * 	"Maxed Skill"	   : optional, default false, boolean value of
+	 * 						 whether this boxed monster has maxed out
+	 * 						 its max evolution skill
+	 * }
+	*/
+    function add(values) {
+    	this._logParams("add", { values : values });
+
+    	// set defaults
+    	if (values["Max Evolved"] == undefined) {
+    		values["Max Evolved"] = false;
+    	}
+    	if (values["Has Final Skill"] == undefined) {
+    		values["Has Final Skill"] = false;
+    	}
+    	if (values["Maxed Skill"] == undefined) {
+    		values["Maxed Skill"] = false;
+    	}
+
+    	var boxedMonster = this._add(values);
+    	this._logReturn("add", boxedMonster);
+    	return boxedMonster;
+    }
+
+})();
+
+// FARM MONSTER
+
+var FarmMonster = function FarmMonster(entry) {
+	this._init(entry);
+	this._addProperties({
+		"Location"	   : { type : Data.PROPERTY_TYPES.CALCULATION },
+		"Drop"     	   : { DataType : Drop },
+		"Drop Monster" : { DataType : Monster },
+		"Skill"        : { DataType : Skill },
+		"For Monsters" : { 
+			DataType     : Monster,
+			isManyToMany : true
+		},
+		"Dungeon"      : { 
+			type     : Data.PROPERTY_TYPES.CALCULATION,
+			variable : "dungeonName"
+		}
+	});
+};
+FarmMonster.prototype = (function () {
+	
+	return mergeMaps(
+		new Data(),
+		{ 
+			constructor 	   : FarmMonster,
+			update			   : update,
+			_updateDropMonster : updateDropMonster,
+			_updateSkill 	   : updateSkill,
+			toString		   : toString,
+		}
+	);
+
+	function update() {
+		this._logParams("update");
+		this._updateDropMonster();
+		this._updateSkill();
+		this._logReturn("update");
+	}
+
+	function updateDropMonster() {
+		this._logParams("updateDropMonster");
+		this.dropMonster = this.drop.monster;
+		this._logReturn("updateDropMonster", this.dropMonster);
+		return this.dropMonster;
+	}
+
+	function updateSkill() {
+		this._logParams("updateSkill");
+		this.skill = this.dropMonster.skill;
+		this._logReturn("updateSkill", this.skill);
+		return this.skill;
+	}
+	
+	function toString() {
+		return this.drop.monster.toString();
+	}
+	
+})();
+
+var FarmMonsterCollection = (function FarmMonsterCollection() {
+    
+    return mergeMaps(
+		new DataCollection(
+			"Farm", FarmMonster
+		),
+		{ 
+			constructor : FarmMonsterCollection,
+			add  		: add,
+			init 		: init
+		}
+	);
+
+    /* 
+	 * Parameter values is a map
+	 * {
+	 * 	"Drop"    	   : Drop object of the monster to be farmed
+	 * 	"For Monsters" : List of boxed monsters that need their skills
+	 * 					 leveled up with the monster to be farmed
+	 * }
+	*/
+    function add(values) {
+    	this._logParams("add", { values : values });
+    	var farmMonster = this._add(values);
+    	this._logReturn("add", farmMonster);
+    	return farmMonster;
+    }
+
+    function init() {
+    	this._logParams("init");
+		
+		if (this.get().length) {
+			message("Empty this farm library before initializing");
+			return;
+		}
+
+		// get skills to farm and the list of boxed monsters that need this skill up
+
+		var skillsToFarm  = {};
+		var boxedMonsters = BoxedMonsterCollection.get();
+		for (var i=0; i<boxedMonsters.length; i++) {
+			var boxedMonster = boxedMonsters[i];
+
+			if (  boxedMonster.isSkillFinal && 
+				 !boxedMonster.isSkillMaxed && 
+				  boxedMonster.monster.skill ) 
+			{
+				// this boxed monster needs to level up its skill
+				if (!(boxedMonster.monster.skill.name in skillsToFarm)) {
+					skillsToFarm[boxedMonster.monster.skill.name] = [];
+				}
+				skillsToFarm[boxedMonster.monster.skill.name].push(boxedMonster);
+			}
+		}
+
+		// find drops that have skill ups our boxed monsters need
+
+		
+		var drops = DropCollection.get();
+		for (var i=0; i<drops.length; i++) {
+			var drop = drops[i];
+
+			if ( drop.floor.dungeon.isAvailable && 
+				 drop.monster.skill && 
+				 drop.monster.skill.name in skillsToFarm &&
+				( drop.floor.dungeon.type != Dungeon.TYPES.NORMAL || 
+				  drop.types.indexOf(Drop.TYPES.MAJOR) < 0 ) )
+			{
+				// this drop is from an available dungeon, 
+				// has a skill that a boxed monster needs to skill up,
+				// and is not a major drop from a normal dungeon since these are unlikely to drop
+
+				this.add({
+					"Drop"         : drop,
+					"For Monsters" : 
+						skillsToFarm[drop.monster.skill.name]
+				});
+
+			}
+		}
+
+		this._logReturn("init");
+	}
+
+})();
