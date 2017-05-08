@@ -35,7 +35,7 @@ var Logger = (function() {
 		if (parameters && Object.keys(parameters).length) {
 			var parametersList = [];
 			for (var key in parameters) {
-				var parameter = JSON.stringify(parameters[key]).replace(/\"/g, "");
+				var parameter = parameters[key];
 				parametersList.push(key + "=" + parameter);
 			}
 			parametersString = 
