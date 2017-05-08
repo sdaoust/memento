@@ -1,3 +1,5 @@
+log("memento script");
+
 // for some reason the below Object functions aren't defined in 
 // memento
 

@@ -1,3 +1,5 @@
+log("Puzzle and dragon script");
+
 // SKILL 
 
 var Skill = function Skill(entry) {
