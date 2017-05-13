@@ -305,7 +305,7 @@ Data.prototype = (function () {
 
 	function logReturn(methodName, returnValue) {
 		var logHeader = this._getLogHeader(methodName);
-		Logger.logReturn(logHeader + ".return: " + returnValue);
+		Logger.logReturn(logHeader, methodName, returnValue);
 	}
 
 	function getLogHeader(methodName) {
