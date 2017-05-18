@@ -365,7 +365,9 @@ Drop.prototype = (function () {
 	}
 	
 	function toString() {
-		return this.location + ": " + this.monster + ": " + this.types.join(", ");
+		return this.location + ": " + 
+			   this.monster  + ": " + 
+			   this.types.join(", ");
 	}
 
 })();
@@ -475,9 +477,7 @@ BoxedMonster.prototype = (function () {
 		this._logReturn("evolve", this.monster);
 		return this.monster;
 	}
-
-	// overwrite Data.update() so that the update functions are 
-	// called in order
+	
 	function update() {
 		this._logParams("update");
 		this._updatePrimaryElement();
@@ -565,8 +565,9 @@ BoxedMonster.prototype = (function () {
 			{
 				var possibleNextEvoMonster = 
 					this.monster.nextEvoMonsters[i];
-				if (possibleNextEvoMonster.evolvesInto(this.maxEvoMonster))
-				{
+				if (possibleNextEvoMonster
+					.evolvesInto(this.maxEvoMonster)
+				) {
 					this.nextEvoMonster = possibleNextEvoMonster;
 					break;
 				}
@@ -584,7 +585,8 @@ BoxedMonster.prototype = (function () {
 	function updateMaxEvolved() {
 		this._logParams("updateMaxEvolved");
 		this.isMaxEvolved = 
-			this.maxEvoMonster && this.monster.equals(this.maxEvoMonster);
+			this.maxEvoMonster && 
+			this.monster.equals(this.maxEvoMonster);
 		this._logReturn("updateMaxEvolved", this.isMaxEvolved);
 		return this.isMaxEvolved;
 	}
@@ -769,7 +771,8 @@ var FarmMonsterCollection = (function FarmMonsterCollection() {
 			return;
 		}
 
-		// get skills to farm and the list of boxed monsters that need this skill up
+		// get skills to farm and the list of boxed monsters that need
+		// this skill up
 
 		var skillsToFarm  = {};
 		var boxedMonsters = BoxedMonsterCollection.get();
@@ -781,10 +784,13 @@ var FarmMonsterCollection = (function FarmMonsterCollection() {
 				  boxedMonster.monster.skill ) 
 			{
 				// this boxed monster needs to level up its skill
-				if (!(boxedMonster.monster.skill.name in skillsToFarm)) {
-					skillsToFarm[boxedMonster.monster.skill.name] = [];
+				if (!(boxedMonster.monster.skill.name in skillsToFarm)
+				) {
+					skillsToFarm[boxedMonster.monster.skill.name] = 
+						[];
 				}
-				skillsToFarm[boxedMonster.monster.skill.name].push(boxedMonster);
+				skillsToFarm[boxedMonster.monster.skill.name]
+					.push(boxedMonster);
 			}
 		}
 
@@ -803,7 +809,8 @@ var FarmMonsterCollection = (function FarmMonsterCollection() {
 			{
 				// this drop is from an available dungeon, 
 				// has a skill that a boxed monster needs to skill up,
-				// and is not a major drop from a normal dungeon since these are unlikely to drop
+				// and is not a major drop from a normal dungeon since
+				// these are unlikely to drop
 
 				this.add({
 					"Drop"         : drop,

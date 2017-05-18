@@ -90,18 +90,25 @@ Data.prototype = (function () {
 	 * 	field name "Max Evo Monster" can be accessed by 
 	 * 	this.maxEvoMonster :
 	 * 		{
-	 * 			"variable" : optional, if a different property 
-	 * 						 variable name is desired, set this value
-	 * 			"type"     : optional, string can be either
-	 * 					     CALCULATION, CUSTOM, or DEFAULT. If no or
-	 * 					     unknown value is given, DEFAULT will be 
-	 * 					     used. CALCULATION is needed for library
-	 * 					     calculation fields. CUSTOM is needed for
-	 * 					     fields that are not defined in the
-	 * 					     library and only used by the code base.
+	 * 			"DataType" 	   : optional, the Data prototype of this 
+	 * 						 	 property
+	 * 	      	"isManyToMany" : optional, default false, boolean 
+	 * 	      					 value reflecting if this property
+	 * 	      					 represents a many to many 
+	 * 	      					 relationship with another library
+	 * 			"variable" 	   : optional, if a different property 
+	 * 						     variable name is desired, set this 
+	 * 						     value
+	 * 			"type"     	   : optional, string can be either
+	 * 					     	 CALCULATION, CUSTOM, or DEFAULT. If 
+	 * 					     	 no value or unknown value is given, 
+	 * 					     	 DEFAULT will be used. CALCULATION is 
+	 * 					     	 needed for library calculation 
+	 * 					     	 fields. CUSTOM is needed for fields 
+	 * 					     	 that are not defined in the library 
+	 * 					     	 and only used by the code base.
 	 * 		}
 	 * }
-	 * Eac
 	 */
 	function addProperties(properties) {
 		
