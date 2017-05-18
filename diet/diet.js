@@ -89,6 +89,3 @@ var FoodCollection = (function FoodCollection() {
     }
 
 })();
-
-var food = new Food(entry());
-food.update();
