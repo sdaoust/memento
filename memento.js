@@ -61,6 +61,7 @@ Data.prototype = (function () {
 		toString 		  : toString,
 		equals            : equals,
 		_init    		  : init,
+		_recalc			  : recalc
 		_addProperties	  : addProperties,
 		_get	 		  : get,
 		_getCalculation   : getCalculation,
@@ -69,7 +70,7 @@ Data.prototype = (function () {
 		_toUpperCamelCase : toUpperCamelCase,
 		_logParams 		  : logParams,
 		_logReturn		  : logReturn,
-		_getLogHeader	  : getLogHeader
+		_getLogHeader	  : getLogHeader,
 	};
 
 	function init(entry) {
@@ -78,6 +79,10 @@ Data.prototype = (function () {
 			get : function() { return entry; },
 		});
 		
+	}
+
+	function recalc() {
+		this._entry.recalc();
 	}
 
 	function update() {} // override in subclass
