@@ -284,6 +284,9 @@ Data.prototype = (function () {
 		}
 
 		this._entry.set(field.name, fieldValue);
+
+		this._entry.recalc();
+		
 		return this._get({
 			name		 : field.name,
 			DataType	 : field.DataType,
