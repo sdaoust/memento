@@ -356,6 +356,7 @@ DataCollection.prototype = (function () {
 		_logReturn 	  : logReturn,
 		_getLogHeader : getLogHeader,
 		toString	  : toString,
+		update		  : update,
 	};
 
 	function init(libraryName, DataType) {
@@ -454,5 +455,7 @@ DataCollection.prototype = (function () {
 	function toString() {
 		return this.constructor.name;
 	}
+
+	function update() {} // override in subclass
 
 })();

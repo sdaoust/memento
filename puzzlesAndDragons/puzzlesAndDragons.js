@@ -206,9 +206,12 @@ var MonsterCollection = (function MonsterCollection() {
 var Dungeon = function Dungeon(entry) {
 	this._init(entry);
 	this._addProperties({
-		"Name"      : {},
-		"Type" 		: {},
-		"Available" : { variable : "isAvailable"},
+		"Name"       : {},
+		"Type" 		 : {},
+		"Order"		 : {},
+		"Available"  : { variable : "isAvailable" },
+		"Is Cleared" : { type     : Data.PROPERTY_TYPES.CUSTOM },
+		"Floors"     : { type     : Data.PROPERTY_TYPES.CUSTOM },
 	});
 };
 Dungeon.TYPES = {
@@ -220,20 +223,108 @@ Dungeon.prototype = (function () {
 	
 	return mergeMaps(
 		new Data(),
-		{ constructor : Dungeon }
+		{ 
+			constructor   : Dungeon,
+			_getIsCleared : getIsCleared,
+			_getFloors    : getFloors,
+		}
 	);
+
+	function getIsCleared() {
+		this._logParams("getIsCleared");
+
+		if (this._isCleared == undefined) {
+			var isCleared = true;
+			for (var i=0; i<this.floors; i++) {
+				var floor = floors[i];
+				if (!floor.isCleared) {
+					isCleared = false;
+					break;
+				}
+			}
+			this._isCleared = isCleared;
+		}
+
+		this._logReturn("getIsCleared", this._isCleared);
+		return this._isCleared;
+	}
+
+	function getFloors() {
+		this._logParams("getFloors");
+
+		if (!this._floors) {
+			this._floors = [];
+			var floors = FloorCollection.get();
+			for (var i=0; i<floors.length; i++) {
+				var floor = floors[i];
+				if (this.equals(floor.dungeon)) {
+					this._floors.push(floor);
+				}
+			}
+		}
+
+		this._logReturn("getFloors", this._floors);
+		return this._floors;
+	}
 
 })();
 
 var DungeonCollection = (function DungeonCollection() {
+
+	var collectionObject = new DataCollection("Dungeons", Dungeon);
+	collectionObject._getCollection = collectionObject.get;
     
     return mergeMaps(
-		new DataCollection("Dungeons", Dungeon),
+		collectionObject,
 		{ 
-			constructor : DungeonCollection,
-			add         : add 
+			constructor 		: DungeonCollection,
+			get 				: get,
+			add         		: add,
+			update 				: update,
+			_updateAvailability : updateAvailability
 		}
 	);
+
+    function get(type) {
+    	this._logParams("get", { type : type });
+
+    	var dungeons = [];
+
+    	if (!type) {
+    		dungeons = this._getCollection();
+    	} 
+
+    	else {
+    		if (!this._subcollection) {
+    			this._subcollection = {};
+    		}
+    		if (!this._subcollection[type]) {
+				
+				this._subcollection[type] = [];
+
+		    	var allDungeons   = this._getCollection();
+		    	var orderDungeons = 
+		    		type == Dungeon.TYPES.NORMAL || 
+		    		type == Dungeon.TYPES.TECHNICAL;
+
+	    		for (var i=0; i<allDungeons.length; i++) {
+	    			var dungeon = allDungeons[i];
+	    			if (dungeon.type == type) {
+	    				if (orderDungeons) {
+	    					this._subcollection[type][dungeon.order] =
+	    						dungeon;
+	    				} else {
+	    					this._subcollection[type].push(dungeon);
+	    				}
+	    			}
+	    		}
+	    	}
+	    	dungeons = this._subcollection[type];
+	    }
+
+    	this._logReturn("get", dungeons);
+    	return dungeons;
+    }
 
     /* 
 	 * Parameter values is a map
@@ -256,6 +347,38 @@ var DungeonCollection = (function DungeonCollection() {
     	var dungeon = this._add(values);
     	this._logReturn("add", dungeon);
     	return dungeon;
+    }
+
+    // update availability of normal and technical dungeons
+    function update() {
+    	this._logParams("update");
+
+    	this._updateAvailability(this.get(Dungeon.TYPES.NORMAL));
+    	this._updateAvailability(this.get(Dungeon.TYPES.TECHNICAL));
+
+    	this._logReturn("update");
+    }
+
+    function updateAvailability(dungeons) {
+    	this._logParams(
+    		"updateAvailability", { dungeons : dungeons }
+    	);
+
+    	// look for the first not available dungeon, and set it to 
+    	// available if the previous dungeon has been cleared
+    	for (var i=1; i<dungeons.length; i++) {
+    		var dungeon = dungeons[i];
+    		if (!dungeon.isAvailable) {
+    			dungeon.isAvailable = true;
+    			break;
+    		}
+    		if (!dungeon.isCleared) {
+    			break;
+    		}
+    	}
+
+    	this._logReturn("updateAvailability", dungeons);
+    	return dungeons;
     }
 
 })();
@@ -825,3 +948,5 @@ var FarmMonsterCollection = (function FarmMonsterCollection() {
 	}
 
 })();
+
+DungeonCollection.update();
