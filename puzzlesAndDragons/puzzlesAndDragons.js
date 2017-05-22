@@ -948,5 +948,3 @@ var FarmMonsterCollection = (function FarmMonsterCollection() {
 	}
 
 })();
-
-DungeonCollection.update();
