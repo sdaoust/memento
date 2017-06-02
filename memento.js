@@ -61,7 +61,7 @@ Data.prototype = (function () {
 		toString 		  : toString,
 		equals            : equals,
 		_init    		  : init,
-		_recalc			  : recalc,
+		recalc			  : recalc,
 		_addProperties	  : addProperties,
 		_get	 		  : get,
 		_getCalculation   : getCalculation,
