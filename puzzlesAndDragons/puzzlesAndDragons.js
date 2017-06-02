@@ -882,6 +882,11 @@ var FarmMonsterCollection = (function FarmMonsterCollection() {
     function add(values) {
     	this._logParams("add", { values : values });
     	var farmMonster = this._add(values);
+
+    	// recalc so the memento library can be grouped by calculated
+    	// fields such as dungeon
+    	farmMonster.recalc();
+
     	this._logReturn("add", farmMonster);
     	return farmMonster;
     }
