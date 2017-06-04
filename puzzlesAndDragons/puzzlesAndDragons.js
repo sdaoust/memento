@@ -206,12 +206,12 @@ var MonsterCollection = (function MonsterCollection() {
 var Dungeon = function Dungeon(entry) {
 	this._init(entry);
 	this._addProperties({
-		"Name"       : {},
-		"Type" 		 : {},
-		"Order"		 : {},
-		"Available"  : { variable : "isAvailable" },
-		"Is Cleared" : {},
-		"Floors"     : { type     : Data.PROPERTY_TYPES.CUSTOM },
+		"Name"      : {},
+		"Type" 		: {},
+		"Order"		: {},
+		"Available" : { variable : "isAvailable" },
+		"Cleared"   : { variable : "isCleared" },
+		"Floors"    : { type     : Data.PROPERTY_TYPES.CUSTOM },
 	});
 };
 Dungeon.TYPES = {
