@@ -398,9 +398,9 @@ var DungeonCollection = (function DungeonCollection() {
 var Floor = function Floor(entry) {
 	this._init(entry);
 	this._addProperties({
-		"Name" 		 : {},
-		"Dungeon"    : { DataType : Dungeon },
-		"Is Cleared" : {},
+		"Name" 	  : {},
+		"Dungeon" : { DataType : Dungeon },
+		"Cleared" : { variable : "isCleared" },
 	});
 };
 Floor.prototype = (function () {
