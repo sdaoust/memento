@@ -254,10 +254,7 @@ Dungeon.prototype = (function () {
 
     	this._updateFloorsCleared();
 
-    	log("done floor creation");
-    	log(this.isCleared);
     	if (this.isCleared) {
-    		log("going to update everything");
 	    	DungeonCollection.update();
 	    }
 
