@@ -224,10 +224,10 @@ Dungeon.prototype = (function () {
 	return mergeMaps(
 		new Data(),
 		{ 
-			constructor    : Dungeon,
-			_getFloors     : getFloors,
-			update		   : update,
-			_updateCleared : updateCleared
+			constructor  		 : Dungeon,
+			_getFloors   		 : getFloors,
+			update		 		 : update,
+			_updateFloorsCleared : updateFloorsCleared
 		}
 	);
 
@@ -252,29 +252,23 @@ Dungeon.prototype = (function () {
     function update() {
     	this._logParams("update");
 
-    	this._updateCleared();
+    	this._updateFloorsCleared();
 
     	this._logReturn("update");
     }
 
-    // this dungeon is cleared if floors are cleared
-    function updateCleared() {
-    	this._logParams("updateCleared", {});
+    // if this dungeon is cleared then so are its floors
+    function updateFloorsCleared() {
+    	this._logParams("updateFloorsCleared", {});    	
 
-    	var isCleared = this.isCleared;
-    	if (!isCleared) {
-    		var areFloorsCleared = true;
-	    	for (var i=0; i<this.floors.length; i++) {
+    	if (this.isCleared) {
+    		for (var i=0; i<this.floors.length; i++) {
 	    		var floor = floors[i];
-	    		if (!floor.isCleared) {
-	    			areFloorsCleared = false;
-	    			break;
-	    		}
+	    		floor.isCleared = true;
 	    	}
-			this.isCleared = areFloorsCleared;
-		}
+    	}
 
-    	this._logReturn("updateCleared", this.isCleared);
+    	this._logReturn("updateFloorsCleared", this.isCleared);
     	return this.isCleared;
     }
 
@@ -409,8 +403,41 @@ Floor.prototype = (function () {
 	
 	return mergeMaps(
 		new Data(),
-		{ constructor : Floor }
+		{ 
+			constructor    		  : Floor,
+			update 			      : update,
+			_updateDungeonCleared : updateDungeonCleared
+		}
 	);
+
+	function update() {
+    	this._logParams("update");
+
+    	this._updateDungeonCleared();
+
+    	this._logReturn("update");
+    }
+
+    // if all floors of this dungeon are cleraed, so is the dungeon
+    function updateDungeonCleared() {
+    	this._logParams("updateDungeonCleared", {});
+
+		var isDungeonCleared = true;
+		for (var i=0; i<this.dungeon.floors.length; i++) {
+			var otherFloor = this.dungeon.floors[i];
+			if (!otherFloor.isCleared) {
+				isDungeonCleared = false;
+				break;
+			}
+		}
+		this.dungeon.isCleared = isDungeonCleared;
+
+    	this._logReturn(
+    		"updateDungeonCleared", this.dungeon.isCleared
+    	);
+    	return this.dungeon.isCleared;
+    }
+
 })();
 
 var FloorCollection = (function FloorCollection() {
