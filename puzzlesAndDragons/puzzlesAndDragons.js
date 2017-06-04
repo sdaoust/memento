@@ -210,7 +210,7 @@ var Dungeon = function Dungeon(entry) {
 		"Type" 		 : {},
 		"Order"		 : {},
 		"Available"  : { variable : "isAvailable" },
-		"Is Cleared" : { type     : Data.PROPERTY_TYPES.CUSTOM },
+		"Is Cleared" : {},
 		"Floors"     : { type     : Data.PROPERTY_TYPES.CUSTOM },
 	});
 };
@@ -224,30 +224,12 @@ Dungeon.prototype = (function () {
 	return mergeMaps(
 		new Data(),
 		{ 
-			constructor   : Dungeon,
-			_getIsCleared : getIsCleared,
-			_getFloors    : getFloors,
+			constructor    : Dungeon,
+			_getFloors     : getFloors,
+			update		   : update,
+			_updateCleared : updateCleared
 		}
 	);
-
-	function getIsCleared() {
-		this._logParams("getIsCleared");
-
-		if (this._isCleared == undefined) {
-			var isCleared = true;
-			for (var i=0; i<this.floors; i++) {
-				var floor = floors[i];
-				if (!floor.isCleared) {
-					isCleared = false;
-					break;
-				}
-			}
-			this._isCleared = isCleared;
-		}
-
-		this._logReturn("getIsCleared", this._isCleared);
-		return this._isCleared;
-	}
 
 	function getFloors() {
 		this._logParams("getFloors");
@@ -266,6 +248,35 @@ Dungeon.prototype = (function () {
 		this._logReturn("getFloors", this._floors);
 		return this._floors;
 	}
+
+    function update() {
+    	this._logParams("update");
+
+    	this._updateCleared();
+
+    	this._logReturn("update");
+    }
+
+    // this dungeon is cleared if floors are cleared
+    function updateCleared() {
+    	this._logParams("updateCleared", {});
+
+    	var isCleared = this.isCleared;
+    	if (!isCleared) {
+    		var areFloorsCleared = true;
+	    	for (var i=0; i<this.floors.length; i++) {
+	    		var floor = floors[i];
+	    		if (!floor.isCleared) {
+	    			areFloorsCleared = false;
+	    			break;
+	    		}
+	    	}
+			this.isCleared = areFloorsCleared;
+		}
+
+    	this._logReturn("updateCleared", this.isCleared);
+    	return this.isCleared;
+    }
 
 })();
 
