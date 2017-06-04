@@ -254,6 +254,8 @@ Dungeon.prototype = (function () {
 
     	this._updateFloorsCleared();
 
+    	DungeonCollection.update();
+
     	this._logReturn("update");
     }
 
@@ -431,6 +433,8 @@ Floor.prototype = (function () {
 			}
 		}
 		this.dungeon.isCleared = isDungeonCleared;
+
+    	DungeonCollection.update();
 
     	this._logReturn(
     		"updateDungeonCleared", this.dungeon.isCleared
