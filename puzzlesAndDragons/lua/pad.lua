@@ -3,37 +3,45 @@ http = require 'socket.http'
 
 function parseMonster(number)
 	
-	html = http.request('http://puzzledragonx.com/en/monster.asp?n='..number)
+	html = getHtml(number)
+
+	if not isMonsterEnglish(html) then
+		return
+	end
 
 	monster = string.match(html, '<title>([^|]+) stats, skills, evolution, location')
 
-	primaryElement = getElement(string.match(html, 'e1=(%d)&e2=%d&o1='))
+	primaryElement = getMonsterElement(string.match(html, 'e1=(%d)&e2=%d&o1='))
 
 	secondaryElementNumber = string.match(html, ' / [^?]+\?e1=(%d)&e2=%d&o1=')
-	secondaryElement = getElement(secondaryElementNumber)
+	secondaryElement = getMonsterElement(secondaryElementNumber)
 
 	skill = string.match(html, '<span class="blue">([^<]+)')
-	if skill == 'None' then skill = '' end
-	
+	if skill == 'None' 
+		then skill = '' 
+	end
+
 	nextEvoMonsters = ''
 	evoType = getMonsterEvoType(number)
 	nextEvoNumber, nextEvoName, nextEvoType = getNextEvoMonster(number)
-	-- if this monster is regular, look for the next evo monster
-	if evoType == 'regular' then
-		nextEvoMonsters = '"'..nextEvoName..'"'
-		-- if the next evo monster is an ultimate monster, look for all ultimate monsters
-		if nextEvoType == 'ultimate' then
-			while nextEvoNumber do
-				nextEvoNumber, nextEvoName, nextEvoType = getNextEvoMonster(nextEvoNumber)
-				if nextEvoType == 'ultimate' then
-					nextEvoMonsters = nextEvoMonsters..', "'..nextEvoName..'"'
+	if nextEvoNumber then 
+		-- if this monster is regular, look for the next evo monster
+		if evoType == 'regular' then
+			nextEvoMonsters = '"'..nextEvoName..'"'
+			-- if the next evo monster is an ultimate monster, look for all ultimate monsters
+			if nextEvoType == 'ultimate' then
+				while nextEvoNumber do
+					nextEvoNumber, nextEvoName, nextEvoType = getNextEvoMonster(nextEvoNumber)
+					if nextEvoType == 'ultimate' then
+						nextEvoMonsters = nextEvoMonsters..', "'..nextEvoName..'"'
+					end
 				end
 			end
+		-- if this monster is an ultimate monster, look for its reincarnated form
+		elseif evoType == 'ultimate' and nextEvoType == 'reincarnated' then
+			nextEvoMonsters = '"'..nextEvoName..'"'
+		-- if this monster is a reincarnated monster, do nothing
 		end
-	-- if this monster is an ultimate monster, look for its reincarnated form
-	elseif evoType == 'ultimate' and nextEvoType == 'reincarnated' then
-		nextEvoMonsters = '"'..nextEvoName..'"'
-	-- if this monster is a reincarnated monster, do nothing
 	end
 
 	-- name	number	primaryelement	secondaryelement	skill	nextevomonsters
@@ -48,7 +56,11 @@ function parseMonster(number)
 	)
 end
 
-function getElement(number)
+function getHtml(number)
+	return http.request('http://puzzledragonx.com/en/monster.asp?n='..number)
+end
+
+function getMonsterElement(number)
 	local element = ''
 	if     number == '1' then element = 'Fire'
 	elseif number == '2' then element =  'Water'
@@ -72,21 +84,35 @@ end
 function getNextEvoMonster(number)
 	local nextEvoNumber, nextEvoName = string.match(html, 'evolveframe[^N]+No.'..number..' .-evolveframe[^N]+No.(%d+) ([^"]+)')
 	local nextEvoType = nil
-	if nextEvoNumber then 
-		nextEvoType = getMonsterEvoType(nextEvoNumber)
+	
+	if nextEvoNumber then
+		--confirm next monster is english
+		if isMonsterEnglish(getHtml(nextEvoNumber)) then
+			nextEvoType = getMonsterEvoType(nextEvoNumber)
+		else
+			--this monster isn't english, so let's try the next one
+			return getNextEvoMonster(nextEvoNumber)
+		end
 	end
 	return nextEvoNumber, nextEvoName, nextEvoType
 end
 
-file = io.open('pad.txt', 'w+')
-lastNumber = 5
-for i=1,5 do
+function isMonsterEnglish(html)
+	return string.find(html, 'This card is not yet available in the English version of PAD') == nil
+end
+
+monsterFile = io.open('monsters.txt', 'w+')
+io.output(monsterFile)
+io.write('Name\tNumber\tPrimary Element\tSecondary Element\tSkill\tNext Evo Monsters\r\n')
+firstMonsterNumber = 2561
+lastMonsterNumber  = 2561
+for i=firstMonsterNumber,lastMonsterNumber do
 	io.output(io.stdout)
-	io.write('\r'..i..'/'..lastNumber)
+	io.write('\r'..i..'/'..lastMonsterNumber)
 	io.flush()
-	io.output(file)
+	io.output(monsterFile)
 	parseMonster(i)
 end
-io.close(file)
+io.close(monsterFile)
 io.output(io.stdout)
 io.write('\n')
