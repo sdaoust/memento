@@ -225,7 +225,8 @@ var Dungeon = function Dungeon(entry) {
 Dungeon.TYPES = {
 	NORMAL    : "Normal",
 	TECHNICAL : "Technical",
-	SPECIAL   : "Special"
+	SPECIAL   : "Special",
+	DAILY	  : "Daily",
 }
 Dungeon.prototype = (function () {
 	
