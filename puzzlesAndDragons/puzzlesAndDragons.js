@@ -247,7 +247,7 @@ Dungeon.prototype = (function () {
 			this._floors = [];
 			var floors = FloorCollection.get();
 			for (var i=0; i<floors.length; i++) {
-				var floor = this.floors[i];
+				var floor = floors[i];
 				if (this.equals(floor.dungeon)) {
 					this._floors.push(floor);
 				}
@@ -276,7 +276,7 @@ Dungeon.prototype = (function () {
 
     	if (this.isCleared) {
     		for (var i=0; i<this.floors.length; i++) {
-	    		var floor = floors[i];
+	    		var floor = this.floors[i];
 	    		floor.isCleared = true;
 	    	}
     	}
