@@ -59,6 +59,9 @@ var SkillCollection = (function SkillCollection() {
 var Monster = function Monster(entry) {
 	this._init(entry);
 	this._addProperties({
+		"Id"				: {
+			type : Data.PROPERTY_TYPES.CALCULATION
+		},
 		"Name" 				: {},
 		"Number" 			: {},
 		"Primary Element"	: {},
@@ -85,6 +88,7 @@ Monster.prototype = (function () {
 			hasSameOrBetterSkillAs : hasSameOrBetterSkillAs,
 			evolvesInto			   : evolvesInto,
 			_getMaxEvoMonsters 	   : getMaxEvoMonsters,
+			toString			   : toString,
 		}
 	);
 
@@ -156,6 +160,10 @@ Monster.prototype = (function () {
 		}
 		this._logReturn("getMaxEvoMonsters", this._maxEvoMonsters);
 		return this._maxEvoMonsters;
+	}
+
+	function toString() {
+		return this.id;
 	}
 
 })();
@@ -398,7 +406,9 @@ var DungeonCollection = (function DungeonCollection() {
 var Floor = function Floor(entry) {
 	this._init(entry);
 	this._addProperties({
+		"Id"	  : { type : Data.PROPERTY_TYPES.CALCULATION },
 		"Name" 	  : {},
+		"Number"  : {},
 		"Dungeon" : { DataType : Dungeon },
 		"Cleared" : { variable : "isCleared" },
 	});
@@ -410,6 +420,7 @@ Floor.prototype = (function () {
 		{ 
 			constructor    		  : Floor,
 			update 			      : update,
+			toString			  : toString,
 			_updateDungeonCleared : updateDungeonCleared
 		}
 	);
@@ -444,6 +455,10 @@ Floor.prototype = (function () {
     		"updateDungeonCleared", this.dungeon.isCleared
     	);
     	return this.dungeon.isCleared;
+    }
+
+    function toString() {
+    	return this.id;
     }
 
 })();
@@ -493,8 +508,6 @@ var Drop = function Drop(entry) {
 		},
 		"Floor" 		  			  : { DataType : Floor },
 		"Monster"					  : { DataType : Monster },
-		"Type"						  : { variable : "types" },
-		"Rate"					      : {},
 		"Primary Element"			  : {},
 		"Primary Element Calculation" : { 
 			type : Data.PROPERTY_TYPES.CALCULATION
@@ -502,12 +515,6 @@ var Drop = function Drop(entry) {
 	});
 	
 };
-Drop.TYPES = {
-	RANDOM : "Random",
-	MAJOR  : "Major",
-	RARE   : "Rare",
-	INVADE : "Invade"
-}
 Drop.prototype = (function () {
 	
 	return mergeMaps(
@@ -534,9 +541,7 @@ Drop.prototype = (function () {
 	}
 	
 	function toString() {
-		return this.location + ": " + 
-			   this.monster  + ": " + 
-			   this.types.join(", ");
+		return this.location + ": " + this.monster 
 	}
 
 })();
@@ -556,19 +561,10 @@ var DropCollection = (function DropCollection() {
 	 * {
 	 * 	"Floor"   : Floor object of this drop
 	 * 	"Monster" : Monster object of this drop
-	 * 	"Type"    : optional, default "Random", string value of the
-	 * 				type of drop, must be one of Drop.TYPES
-	 * 	"Rate"	  : optional, integer rate percentage of this drop
 	 * }
 	*/
     function add(values) {
     	this._logParams("add", { values : values });
-
-    	// set defaults
-    	if (!values["Type"]) {
-    		values["Type"] = Drop.TYPES.RANDOM;
-    	}
-
     	var drop = this._add(values);
     	this._logReturn("add", drop);
     	return drop;
